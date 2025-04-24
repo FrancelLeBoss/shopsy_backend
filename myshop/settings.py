@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv  # Import the load_dotenv function from dotenv
+import dj_database_url  # Import the dj_database_url module
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
@@ -80,13 +81,27 @@ WSGI_APPLICATION = "myshop.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
 
+# Détecter l'environnement (local ou production)
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Par défaut, 'development'
+
+if ENVIRONMENT == "production":
+    # Configuration pour PostgreSQL en production
+    DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+else:
+    # Configuration pour SQLite en développement local
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
