@@ -6,3 +6,4 @@ sqlparse==0.5.3
 tzdata==2025.2
 django-cors-headers==3.14.0  # Pour gérer les CORS
 gunicorn==20.1.0  # Serveur WSGI pour la production
+Pillow==10.0.0  # Pour le traitement d'images
