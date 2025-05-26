@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     add_to_cart,
+    already_in_wishlist,
     email_exists,
     empty_cart,
     get_cart_user,
@@ -21,8 +22,14 @@ from .views import (
     register,
     remove_from_cart,
     save_comment,
+    send_verification_code,
+    reset_password,
     update_cart,
     username_exists,
+    add_to_wishlist,
+    get_wishlist,
+    remove_from_wishlist,
+    empty_wishlist,
 )
 
 urlpatterns = [
@@ -57,6 +64,12 @@ urlpatterns = [
     path("register/", register, name="register"),
     path("user/username/", username_exists, name="username_exists"),
     path("user/email/", email_exists, name="email_exists"),
+    path(
+        "user/send_verification_code/",
+        send_verification_code,
+        name="send_verification_code",
+    ),
+    path("user/reset_password/", reset_password, name="reset_password"),
     path("comments/save/", save_comment, name="save_comment"),
     path("comments/<int:product_id>/", get_comments, name="get_comments"),
     path("user/<int:user_id>/", get_user, name="get_user"),
@@ -65,4 +78,9 @@ urlpatterns = [
     path("cart/update/", update_cart, name="update_cart"),
     path("cart/<int:user_id>/empty/", empty_cart, name="empty_cart"),
     path("cart/remove/", remove_from_cart, name="remove_from_cart"),
+    path("wishlist/", get_wishlist, name="get_wishlist"),
+    path("wishlist/add/", add_to_wishlist, name="add_to_wishlist"),
+    path("wishlist/remove/", remove_from_wishlist, name="remove_from_wishlist"),
+    path("wishlist/empty/", empty_wishlist, name="empty_wishlist"),
+    path("wishlist/already_exists/", already_in_wishlist, name="already_in_wishlist"),
 ]

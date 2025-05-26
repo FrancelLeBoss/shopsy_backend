@@ -161,14 +161,18 @@ class Cart(models.Model):
 
 
 class Wishlist(models.Model):
-    """Modèle de liste de souhaits."""
-
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(
-        auto_now_add=True
-    )  # Date d'ajout à la liste de souhaits
-    updated_at = models.DateTimeField(auto_now=True)  # Date de mise à jour
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.CASCADE, null=True, blank=True
+    )
+    size = models.ForeignKey(
+        ProductVariantSize, on_delete=models.CASCADE, null=True, blank=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "variant", "size")
 
     def __str__(self):
-        return f"Liste de souhaits de {self.user.username} - {self.product.title}"
+        return f"Liste de souhaits de {self.user.username} - {self.variant.product}"

@@ -116,4 +116,4 @@ class WishlistSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Wishlist
-        fields = ["id", "variant", "user"]
+        fields = ["id", "variant", "user", "size"]

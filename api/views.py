@@ -5,13 +5,15 @@ from rest_framework import response
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
-from .models import Cart, Product, ProductVariant, ProductVariantSize, Rating
+from .models import Cart, Product, ProductVariant, ProductVariantSize, Rating, Wishlist
 from .models import SubCategory
 from .models import Category
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK
+import random
+from django.core.mail import send_mail
 from .serializers import (
     ProductSerializer,
     ProductVariantSerializer,
@@ -23,6 +25,11 @@ from .serializers import (
     UserSerializer,
     WishlistSerializer,
 )
+
+
+def generate_verification_code():
+    """Générer un code de vérification aléatoire à 6 chiffres."""
+    return str(random.randint(100000, 999999))
 
 
 # Create your views here.
@@ -148,6 +155,51 @@ def get_comments(request, product_id):
     ratings = Rating.objects.filter(product=product)
     serializer = RatingSerializer(ratings, many=True)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def send_verification_code(request):
+    """Envoie un e-mail de vérification à l'utilisateur."""
+    email = request.data.get("email")
+    if not email:
+        return Response({"error": "Email is required."}, status=HTTP_400_BAD_REQUEST)
+    code = generate_verification_code()
+    subject = "Your verification code"
+    message = "Here is your verification code : " + code
+
+    from_email = (
+        "Shopsy Online Shop"  # Assurez-vous que cela correspond à EMAIL_HOST_USER
+    )
+
+    try:
+        send_mail(subject, message, from_email, [email])
+        return Response(
+            {"message": "Verification email sent!", "code": code, "to": email},
+            status=HTTP_200_OK,
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def reset_password(request):
+    """Réinitialise le mot de passe de l'utilisateur."""
+    email = request.data.get("email")
+    new_password = request.data.get("newPassword")
+    if not email or not new_password:
+        return Response(
+            {"error": "Email and new password are required."},
+            status=HTTP_400_BAD_REQUEST,
+        )
+    try:
+        user = User.objects.get(email=email)
+        user.set_password(new_password)
+        user.save()
+        return Response({"message": "Password reset successfully!"}, status=HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])
@@ -341,17 +393,6 @@ def email_exists(request):
         return Response({"exists": False}, status=HTTP_200_OK)
 
 
-@api_view(["POST"])
-def send_verification_code(request):
-    """Envoie un code de vérification à l'utilisateur."""
-    email = request.data.get("email")
-    if not email:
-        return Response({"error": "Email is required."}, status=HTTP_400_BAD_REQUEST)
-    # Implémentez la logique d'envoi de code de vérification ici
-
-    return Response({"message": "Verification code sent!"}, status=HTTP_200_OK)
-
-
 @api_view(["GET"])
 def get_cart_user(request, user_id):
     """ "Retourne le panier d’un utilisateur spécifique."""
@@ -364,6 +405,164 @@ def get_cart_user(request, user_id):
         )
         serializer = CartSerializer(cart_items, many=True)
         return Response(serializer.data, status=HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def already_in_wishlist(request):
+    """Vérifie si un produit est déjà dans la liste de souhaits."""
+    user_id = request.data.get("user_id")
+    variant_id = request.data.get("variant_id")
+    # Vérifier que les champs sont remplis
+    if not user_id or not variant_id:
+        return Response(
+            {"error": "User ID and variant ID are required."},
+            status=HTTP_400_BAD_REQUEST,
+        )
+    # Vérifier que l’utilisateur existe
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "User not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier que la variante existe
+    try:
+        variant = ProductVariant.objects.get(pk=variant_id)
+    except ProductVariant.DoesNotExist:
+        return Response({"error": "Variant not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier si l’élément est déjà dans la liste de souhaits
+    wishlist_items = Wishlist.objects.filter(user=user, variant=variant)
+    if wishlist_items.exists():
+        return Response({"exists": True}, status=HTTP_200_OK)
+    else:
+        return Response({"exists": False}, status=HTTP_200_OK)
+
+
+@api_view(["POST"])
+def add_to_wishlist(request):
+    """Ajoute un produit à la liste de souhaits."""
+    user_id = request.data.get("user_id")
+    variant_id = request.data.get("variant_id")
+    created_at = timezone.now()
+    updated_at = timezone.now()
+    # Vérifier que les champs sont remplis
+    if not user_id or not variant_id:
+        return Response(
+            {"error": "User ID and variant ID are required."},
+            status=HTTP_400_BAD_REQUEST,
+        )
+    # Vérifier que l’utilisateur existe
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "User not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier que la variante existe
+    try:
+        variant = ProductVariant.objects.get(pk=variant_id)
+    except ProductVariant.DoesNotExist:
+        return Response({"error": "Variant not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier si l’élément est déjà dans la liste de souhaits
+    try:
+        wishlist_items = Wishlist.objects.filter(user=user, variant=variant)
+        if wishlist_items.exists():
+            # Si des éléments existent, mettez à jour le premier
+            wishlist_item = wishlist_items.first()
+            wishlist_item.updated_at = updated_at
+            wishlist_item.save()
+        else:
+            # Sinon, créez un nouvel élément de liste de souhaits
+            wishlist_item = Wishlist.objects.create(
+                user=user,
+                variant=variant,
+                created_at=created_at,
+                updated_at=updated_at,
+            )
+    except Exception as e:
+        return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
+    return Response(
+        {
+            "message": "Product added to wishlist successfully!",
+            "wishlist_item": {
+                "user_id": user_id,
+                "user": UserSerializer(user).data,
+                "variant_id": variant_id,
+                "variant": ProductVariantSerializer(
+                    variant
+                ).data,  # Sérialiser l'objet variant
+                "created_at": created_at,
+                "updated_at": updated_at,
+            },
+        }
+    )
+
+
+@api_view(["POST"])
+def get_wishlist(request):
+    """Retourne la liste de souhaits d’un utilisateur spécifique."""
+    user_id = request.data.get("user_id")
+    try:
+        user = User.objects.get(pk=user_id)
+        wishlist_items = Wishlist.objects.filter(user=user).prefetch_related("variant")
+        serializer = WishlistSerializer(wishlist_items, many=True)
+        return Response(serializer.data, status=HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def remove_from_wishlist(request):
+    """Supprime un produit de la liste de souhaits."""
+    user_id = request.data.get("user_id")
+    variant_id = request.data.get("variant_id")
+    # Vérifier que les champs sont remplis
+    if not user_id or not variant_id:
+        return Response(
+            {"error": "User ID and variant ID are required."},
+            status=HTTP_400_BAD_REQUEST,
+        )
+    # Vérifier que l’utilisateur existe
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return Response({"error": "User not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier que la variante existe
+    try:
+        variant = ProductVariant.objects.get(pk=variant_id)
+    except ProductVariant.DoesNotExist:
+        return Response({"error": "Variant not found."}, status=HTTP_400_BAD_REQUEST)
+    # Vérifier si l’élément est déjà dans la liste de souhaits
+    try:
+        wishlist_item = Wishlist.objects.get(user=user, variant=variant)
+        # Si l’élément est trouvé, supprimez-le de la liste de souhaits
+        deletedID = wishlist_item.id
+        wishlist_item.delete()
+        return Response(
+            {
+                "message": "Product removed from wishlist successfully!",
+                "wishlist_item": {
+                    "id": deletedID,
+                    "variant": ProductVariantSerializer(variant).data,
+                    "user": UserSerializer(user).data,
+                },
+            },
+            status=HTTP_200_OK,
+        )
+    except Wishlist.DoesNotExist:
+        return Response(
+            {"error": "Wishlist item not found."}, status=HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(["POST"])
+def empty_wishlist(request):
+    """Vider la liste de souhaits d’un utilisateur spécifique."""
+    user_id = request.data.get("user_id")
+    try:
+        user = User.objects.get(pk=user_id)
+        Wishlist.objects.filter(user=user).delete()
+        return Response(
+            {"message": "Wishlist emptied successfully!"}, status=HTTP_200_OK
+        )
     except User.DoesNotExist:
         return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
 

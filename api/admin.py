@@ -96,11 +96,11 @@ class CartAdmin(admin.ModelAdmin):
 
 
 class WishlistAdmin(admin.ModelAdmin):
-    list_display = ("product", "user")
-    search_fields = ("product__title", "user__username")
+    list_display = ("variant", "user", "size")
+    search_fields = ("variant__product__title", "user__username")
     list_filter = ("user",)
-    raw_id_fields = ("product", "user")  # Use raw_id_fields for better performance
-    autocomplete_fields = ("product", "user")  # Use autocomplete_fields for better UX
+    raw_id_fields = ("variant", "user")  # Use raw_id_fields for better performance
+    autocomplete_fields = ("variant", "user")  # Use autocomplete_fields for better UX
 
 
 # Register models in the Django admin
