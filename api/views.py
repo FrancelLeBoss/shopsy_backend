@@ -1,10 +1,10 @@
 from datetime import timezone
 from django.utils import timezone
 from django.shortcuts import render
-from rest_framework import response
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from .models import Cart, Product, ProductVariant, ProductVariantSize, Rating, Wishlist
 from .models import SubCategory
 from .models import Category
@@ -12,7 +12,9 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_200_OK
+from rest_framework import status
 import random
+from .serializers import RegisterSerializer
 from django.core.mail import send_mail
 from .serializers import (
     ProductSerializer,
@@ -25,6 +27,15 @@ from .serializers import (
     UserSerializer,
     WishlistSerializer,
 )
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+from rest_framework import generics, status
+from django.http import HttpResponseRedirect
+from django.utils import timezone
+from datetime import timedelta
+from django.conf import settings
 
 
 def generate_verification_code():
@@ -306,58 +317,137 @@ def login(request):
         )
 
 
-@csrf_exempt
-@api_view(["POST"])
-def register(request):
-    """Gère l'enregistrement d'un nouvel utilisateur."""
-    username = request.data.get("username")
-    email = request.data.get("email")
-    password = request.data.get("password")
+# This is for the /api/register/ endpoint
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = RegisterSerializer
 
-    # Vérifier que tous les champs sont remplis
-    if not username or not email or not password:
-        return Response(
-            {"error": "Username, email, and password are required."},
-            status=HTTP_400_BAD_REQUEST,
-        )
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)  # Calls the create method of the serializer
 
-    # Vérifier si le nom d'utilisateur existe déjà
-    if User.objects.filter(username=username).exists():
-        return Response(
-            {"error": "Username already exists."},
-            status=HTTP_400_BAD_REQUEST,
-        )
-
-    # Vérifier si l'email existe déjà
-    if User.objects.filter(email=email).exists():
-        return Response(
-            {"error": "Email already exists."},
-            status=HTTP_400_BAD_REQUEST,
-        )
-
-    # Créer un nouvel utilisateur
-    try:
-        user = User.objects.create_user(
-            username=username, email=email, password=password
-        )
-        user.save()
-
-        # Générer un token pour l'utilisateur
-        token, created = Token.objects.get_or_create(user=user)
-
+        # Return a success message, but NO TOKEN yet
         return Response(
             {
-                "message": "User registered successfully!",
-                "user": {
-                    "username": user.username,
-                    "email": user.email,
-                },
-                "token": token.key,
+                "message": "Votre compte a été créé avec succès. Veuillez vérifier votre email pour l'activer."
             },
-            status=HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
+            headers=self.get_success_headers(serializer.data),
         )
-    except Exception as e:
-        return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
+
+
+class ActivateAccountView(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    lookup_field = "email_verification_token"
+
+    def get(self, request, *args, **kwargs):
+        try:
+            user = self.get_object()  # Récupère l'utilisateur par le token
+
+            # Vérifie si le token a expiré (ex: après 24 heures)
+            if user.email_verification_sent_at and (
+                timezone.now() - user.email_verification_sent_at
+            ) > timedelta(hours=24):
+                user.email_verification_token = None  # Invalide le token expiré
+                user.save()
+                return Response(
+                    {
+                        "detail": "Le lien d'activation a expiré. Veuillez vous réinscrire ou demander un nouveau lien."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Vérifie si le compte est déjà actif
+            if user.is_active:
+                return Response(
+                    {"detail": "Votre compte est déjà actif."},
+                    status=status.HTTP_200_OK,  # Ou 409 Conflict si vous préférez être plus strict
+                )
+
+            # Active le compte
+            user.is_active = True
+            user.email_verification_token = None  # Invalide le token après utilisation
+            user.email_verification_sent_at = None
+            user.save()
+            print(f"je test 1")
+            return Response(
+                {"message": "Votre compte a été activé avec succès !"},
+                status=status.HTTP_200_OK,
+            )
+
+        except (
+            User.DoesNotExist
+        ):  # Gère le cas où le token ne correspond à aucun utilisateur
+            return Response(
+                {"detail": "Lien d'activation invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:  # Pour toute autre erreur inattendue
+            print(f"Erreur lors de l'activation du compte: {e}")
+            return Response(
+                {
+                    "detail": "Une erreur est survenue lors de l'activation de votre compte."
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+# @csrf_exempt
+# @api_view(["POST"])
+# def register(request):
+#     """Gère l'enregistrement d'un nouvel utilisateur."""
+#     username = request.data.get("username")
+#     email = request.data.get("email")
+#     password = request.data.get("password")
+#     newsLetterSubscription = request.data.get("newsLetterSubscription")
+#     is_active = request.data.get("is_active")
+
+#     # Vérifier que tous les champs sont remplis
+#     if not username or not email or not password:
+#         return Response(
+#             {"error": "Username, email, and password are required."},
+#             status=HTTP_400_BAD_REQUEST,
+#         )
+
+#     # Vérifier si le nom d'utilisateur existe déjà
+#     if User.objects.filter(username=username).exists():
+#         return Response(
+#             {"error": "Username already exists."},
+#             status=HTTP_400_BAD_REQUEST,
+#         )
+
+#     # Vérifier si l'email existe déjà
+#     if User.objects.filter(email=email).exists():
+#         return Response(
+#             {"error": "Email already exists."},
+#             status=HTTP_400_BAD_REQUEST,
+#         )
+
+#     # Créer un nouvel utilisateur
+#     try:
+#         user = User.objects.create_user(
+#             username=username, email=email, password=password, newsLetterSubscription = newsLetterSubscription,
+#             is_active=is_active
+#         )
+#         user.save()
+
+#         # Générer un token pour l'utilisateur
+#         token, created = Token.objects.get_or_create(user=user)
+
+#         return Response(
+#             {
+#                 "message": "User registered successfully!",
+#                 "user": {
+#                     "username": user.username,
+#                     "email": user.email,
+#                 },
+#                 "token": token.key,
+#             },
+#             status=HTTP_200_OK,
+#         )
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
 @csrf_exempt
@@ -373,6 +463,21 @@ def logout(request):
         return Response({"message": "Logout successful!"}, status=HTTP_200_OK)
     except Token.DoesNotExist:
         return Response({"error": "Invalid token."}, status=HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def user_me(request):
+    user = request.user
+    return Response(
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            # Ajoute d'autres champs si besoin
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -393,20 +498,18 @@ def email_exists(request):
         return Response({"exists": False}, status=HTTP_200_OK)
 
 
+@permission_classes([IsAuthenticated])
 @api_view(["GET"])
-def get_cart_user(request, user_id):
+def get_cart_user(request):
     """ "Retourne le panier d’un utilisateur spécifique."""
-    try:
-        user = User.objects.get(pk=user_id)
-        cart_items = (
-            Cart.objects.filter(user=user)
-            .prefetch_related("variant")
-            .prefetch_related("size")
-        )
-        serializer = CartSerializer(cart_items, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
-    except User.DoesNotExist:
-        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+    user = request.user  # Utilisateur authentifié
+    cart_items = (
+        Cart.objects.filter(user=user)
+        .prefetch_related("variant")
+        .prefetch_related("size")
+    )
+    serializer = CartSerializer(cart_items, many=True)
+    return Response(serializer.data, status=HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -469,6 +572,7 @@ def add_to_wishlist(request):
             wishlist_item = wishlist_items.first()
             wishlist_item.updated_at = updated_at
             wishlist_item.save()
+            id = wishlist_item.id
         else:
             # Sinon, créez un nouvel élément de liste de souhaits
             wishlist_item = Wishlist.objects.create(
@@ -477,6 +581,7 @@ def add_to_wishlist(request):
                 created_at=created_at,
                 updated_at=updated_at,
             )
+            id = wishlist_item.id
     except Exception as e:
         return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
     return Response(
@@ -484,6 +589,7 @@ def add_to_wishlist(request):
             "message": "Product added to wishlist successfully!",
             "wishlist_item": {
                 "user_id": user_id,
+                "id": id,
                 "user": UserSerializer(user).data,
                 "variant_id": variant_id,
                 "variant": ProductVariantSerializer(
@@ -496,17 +602,17 @@ def add_to_wishlist(request):
     )
 
 
-@api_view(["POST"])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_wishlist(request):
     """Retourne la liste de souhaits d’un utilisateur spécifique."""
-    user_id = request.data.get("user_id")
-    try:
-        user = User.objects.get(pk=user_id)
-        wishlist_items = Wishlist.objects.filter(user=user).prefetch_related("variant")
-        serializer = WishlistSerializer(wishlist_items, many=True)
-        return Response(serializer.data, status=HTTP_200_OK)
-    except User.DoesNotExist:
-        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+    user = request.user  # <-- L'utilisateur est déjà défini par le token JWT
+    # La gestion d'erreur User.DoesNotExist n'est plus nécessaire ici
+    # car si l'utilisateur n'existait pas, IsAuthenticated aurait déjà rejeté la requête.
+
+    wishlist_items = Wishlist.objects.filter(user=user).prefetch_related("variant")
+    serializer = WishlistSerializer(wishlist_items, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -641,35 +747,29 @@ def add_to_cart(request):
 
 
 @api_view(["GET"])
-def empty_cart(request, user_id):
+@permission_classes([IsAuthenticated])
+def empty_cart(request):
     """Vider le panier d’un utilisateur spécifique."""
-    try:
-        user = User.objects.get(pk=user_id)
-        Cart.objects.filter(user=user).delete()
-        return Response({"message": "Cart emptied successfully!"}, status=HTTP_200_OK)
-    except User.DoesNotExist:
-        return Response({"error": "User not found"}, status=HTTP_400_BAD_REQUEST)
+    user = request.user
+    Cart.objects.filter(user=user).delete()
+    return Response({"message": "Cart emptied successfully!"}, status=HTTP_200_OK)
 
 
+@permission_classes([IsAuthenticated])
 @api_view(["POST"])
 def update_cart(request):
     """Modifier la quantité d’un produit dans le panier."""
-    user_id = request.data.get("user_id")
+    user = request.user  # Utilisateur authentifié
     variant_id = request.data.get("variant_id")
     size_id = request.data.get("size_id") if request.data.get("size_id") else None
     quantity = request.data.get("quantity")
     updated_at = timezone.now()
     # Vérifier que les champs sont remplis
-    if not user_id or not variant_id or quantity is None:
+    if not variant_id or quantity is None:
         return Response(
-            {"error": "User ID, variant ID, and quantity are required."},
+            {"error": "variant ID, and quantity are required."},
             status=HTTP_400_BAD_REQUEST,
         )
-    # Vérifier que l’utilisateur existe
-    try:
-        user = User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        return Response({"error": "User not found."}, status=HTTP_400_BAD_REQUEST)
     # Vérifier que la variante existe
     try:
         variant = ProductVariant.objects.get(pk=variant_id)
@@ -697,7 +797,7 @@ def update_cart(request):
                 {
                     "message": "Cart updated successfully!",
                     "cart_item": {
-                        "user_id": user_id,
+                        "user_id": user.id,
                         "user": UserSerializer(user).data,
                         "variant_id": variant_id,
                         "size": (
@@ -720,23 +820,19 @@ def update_cart(request):
         return Response({"error": str(e)}, status=HTTP_400_BAD_REQUEST)
 
 
+@permission_classes([IsAuthenticated])
 @api_view(["POST"])
 def remove_from_cart(request):
     """Supprime un produit du panier."""
-    user_id = request.data.get("user_id")
+    user = request.user  # Utilisateur authentifié
     variant_id = request.data.get("variant_id")
     size_id = request.data.get("size_id") if request.data.get("size_id") else None
     # Vérifier que les champs sont remplis
-    if not user_id or not variant_id:
+    if not variant_id:
         return Response(
-            {"error": "User ID and variant ID are required."},
+            {"error": "variant ID is required."},
             status=HTTP_400_BAD_REQUEST,
         )
-    # Vérifier que l’utilisateur existe
-    try:
-        user = User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        return Response({"error": "User not found."}, status=HTTP_400_BAD_REQUEST)
     # Vérifier que la variante existe
     try:
         variant = ProductVariant.objects.get(pk=variant_id)
@@ -749,20 +845,31 @@ def remove_from_cart(request):
             return Response({"error": "Size not found."}, status=HTTP_400_BAD_REQUEST)
     # Vérifier si l’élément est déjà dans le panier
     try:
-        cart_item = Cart.objects.get(user=user, variant=variant)
+        queryset = Cart.objects.filter(user=user, variant=variant)
         # Si la taille est spécifiée, vérifiez également si elle correspond
         if size_id:
-            cart_item = Cart.objects.get(user=user, variant=variant, size=size)
+            queryset = queryset.filter(size=size)
+        cart_item = (
+            queryset.first()
+        )  # ou .get() si tu es sûr qu'il n'y a qu'un seul résultat
+        if not cart_item:
+            return Response(
+                {"error": "Cart item not found."}, status=HTTP_400_BAD_REQUEST
+            )
         # Si l’élément est trouvé, supprimez-le du panier
+        deletedID = cart_item.id
         cart_item.delete()
         return Response(
             {
                 "message": "Product removed from cart successfully!",
                 "cart_item": {
-                    "user_id": user_id,
+                    "user_id": user.id,
+                    "deletedID": deletedID,
                     "variant_id": variant_id,
-                    "size": size if size_id else None,
-                    "variant": variant,
+                    "size": (
+                        ProductVariantSizeSerializer(size).data if size_id else None
+                    ),
+                    "variant": ProductVariantSerializer(variant).data,
                 },
             },
             status=HTTP_200_OK,

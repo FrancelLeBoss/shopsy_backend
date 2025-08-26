@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    ActivateAccountView,
+    RegisterView,
     add_to_cart,
     already_in_wishlist,
     email_exists,
@@ -19,7 +21,6 @@ from .views import (
     get_categories,
     login,
     logout,
-    register,
     remove_from_cart,
     save_comment,
     send_verification_code,
@@ -30,6 +31,7 @@ from .views import (
     get_wishlist,
     remove_from_wishlist,
     empty_wishlist,
+    user_me,
 )
 
 urlpatterns = [
@@ -59,9 +61,17 @@ urlpatterns = [
     ),
     path("products/size/<int:size_id>/", get_size_details, name="get_size_details"),
     path("categories/<int:pk>/", get_category, name="get_category"),
+    # Authentication endpoints
     path("login/", login, name="login"),
     path("logout/", logout, name="logout"),
-    path("register/", register, name="register"),
+    path("register/", RegisterView.as_view(), name="register"),
+    path(
+        "activate/<uuid:email_verification_token>/",
+        ActivateAccountView.as_view(),
+        name="activate_account",
+    ),  # <-- Ajouté pour l'activation
+    # User-related endpoints
+    path("user/me/", user_me, name="get_current_user"),
     path("user/username/", username_exists, name="username_exists"),
     path("user/email/", email_exists, name="email_exists"),
     path(
@@ -73,12 +83,12 @@ urlpatterns = [
     path("comments/save/", save_comment, name="save_comment"),
     path("comments/<int:product_id>/", get_comments, name="get_comments"),
     path("user/<int:user_id>/", get_user, name="get_user"),
-    path("cart/<int:user_id>/", get_cart_user, name="get_cart_user"),
+    path("cart/", get_cart_user, name="get_cart_user"),
     path("cart/add/", add_to_cart, name="add_to_cart"),
     path("cart/update/", update_cart, name="update_cart"),
-    path("cart/<int:user_id>/empty/", empty_cart, name="empty_cart"),
+    path("cart/empty/", empty_cart, name="empty_cart"),
     path("cart/remove/", remove_from_cart, name="remove_from_cart"),
-    path("wishlist/", get_wishlist, name="get_wishlist"),
+    path("wishlist/", get_wishlist, name="user_wishlist"),
     path("wishlist/add/", add_to_wishlist, name="add_to_wishlist"),
     path("wishlist/remove/", remove_from_wishlist, name="remove_from_wishlist"),
     path("wishlist/empty/", empty_wishlist, name="empty_wishlist"),

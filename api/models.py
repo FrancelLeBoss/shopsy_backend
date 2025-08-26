@@ -1,7 +1,40 @@
 from django.db import models
 from django.utils import timezone
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser
 from django import forms
+import uuid
+
+
+class User(AbstractUser):
+    """Modèle utilisateur personnalisé pour étendre les fonctionnalités de base."""
+
+    email_verification_token = models.UUIDField(
+        default=uuid.uuid4, null=True, blank=True
+    )
+    email_verification_sent_at = models.DateTimeField(null=True, blank=True)
+    newsletter_subscription = models.BooleanField(default=False)
+
+    # FIX for related_name clashes (E304 errors) - IMPORTANT!
+    # These are needed if you get the 'clashes with reverse accessor' error
+    groups = models.ManyToManyField(
+        "auth.Group",
+        verbose_name=("groups"),
+        blank=True,
+        help_text=(
+            "The groups this user belongs to. A user will get all permissions "
+            "granted to each of their groups."
+        ),
+        related_name="api_user_groups",  # <-- Unique related_name
+        related_query_name="user",
+    )
+    user_permissions = models.ManyToManyField(
+        "auth.Permission",
+        verbose_name=("user permissions"),
+        blank=True,
+        help_text=("Specific permissions for this user."),
+        related_name="api_user_permissions",  # <-- Unique related_name
+        related_query_name="user",
+    )
 
 
 def product_image_path(instance, filename):
@@ -17,6 +50,7 @@ def variant_image_path(instance, filename):
 class Category(models.Model):
     title = models.CharField(max_length=255)
     img = models.ImageField(upload_to="categories/")
+    slug = models.SlugField(max_length=255, unique=True)
     short_desc = models.TextField(blank=True, null=True)
     long_desc = models.TextField(blank=True, null=True)
 
@@ -121,9 +155,7 @@ class Rating(models.Model):
     product = models.ForeignKey(
         Product, related_name="ratings", on_delete=models.CASCADE
     )
-    user = models.ForeignKey(
-        "auth.User", related_name="ratings", on_delete=models.CASCADE
-    )
+    user = models.ForeignKey(User, related_name="ratings", on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now=True)
     updated_at = models.DateTimeField(auto_now=True)
     stars = models.IntegerField(default=0)  # Note sur 5

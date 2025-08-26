@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "api",
     "rest_framework.authtoken",
+    "rest_framework_simplejwt",
 ]
 
 MIDDLEWARE = [
@@ -55,8 +56,59 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Si vous avez d'autres classes d'authentification (ex: SessionAuthentication)
+        # 'rest_framework.authentication.SessionAuthentication',
+    ),
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.AllowAny",  # C'est une bonne valeur par défaut pour les API JWT
+    ),
+    # ... autres configurations DRF si vous en avez
+}
 
+from datetime import timedelta  # N'oubliez pas d'importer timedelta !
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        hours=8
+    ),  # Le token d'accès sera valide 8 heures
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        weeks=2
+    ),  # Le token de rafraîchissement sera valide 2 semaines
+    # --- Paramètres de sécurité et de rotation des tokens (hautement recommandés) ---
+    "ROTATE_REFRESH_TOKENS": True,  # Quand un refresh token est utilisé, un nouveau est généré
+    "BLACKLIST_AFTER_ROTATION": True,  # L'ancien refresh token est blacklisté après rotation
+    "UPDATE_LAST_LOGIN": False,  # Optionnel: met à jour le champ last_login de l'utilisateur
+    # --- Autres paramètres par défaut (généralement pas besoin de les modifier) ---
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,  # Utilise votre SECRET_KEY de Django
+    "VERIFYING_KEY": None,
+    "AUDIENCE": None,
+    "ISSUER": None,
+    "JWK_URL": None,
+    "LEEWAY": 0,
+    "AUTH_USER_MODEL": "api.User",
+    "AUTH_HEADER_TYPES": (
+        "Bearer",
+    ),  # Le type de préfixe pour le token dans l'en-tête Authorization
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "USER_AUTHENTICATION_RULE": "rest_framework_simplejwt.authentication.default_user_authentication_rule",
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "TOKEN_TYPE_CLAIM": "token_type",
+    "TOKEN_USER_CLASS": "rest_framework_simplejwt.models.TokenUser",
+    "JTI_CLAIM": "jti",
+    # Pour les tokens "glissants" (Sliding Tokens), si vous les utilisiez. Pas nécessaires pour votre cas.
+    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=5),
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
+}
+
+CORS_ALLOW_ALL_ORIGINS = True
+AUTH_USER_MODEL = "api.User"
+FRONTEND_BASE_URL = "http://localhost:5173/"
 ROOT_URLCONF = "myshop.urls"
 
 TEMPLATES = [
@@ -89,19 +141,31 @@ WSGI_APPLICATION = "myshop.wsgi.application"
 # }
 
 # Détecter l'environnement (local ou production)
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Par défaut, 'development'
+# ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Par défaut, 'development'
 
-if ENVIRONMENT == "production":
-    # Configuration pour PostgreSQL en production
-    DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
-else:
-    # Configuration pour SQLite en développement local
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
-        }
+# if ENVIRONMENT == "production":
+#     # Configuration pour PostgreSQL en production
+#     DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+# else:
+#     # Configuration pour SQLite en développement local
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.sqlite3",
+#             "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
+#         }
+#     }
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "my_shop_db"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "francelKazakh*2022"),
+        "HOST": os.getenv("DB_HOST", "db"),
+        "PORT": os.getenv("DB_PORT", "5432"),
     }
+}
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

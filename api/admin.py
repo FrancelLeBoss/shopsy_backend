@@ -9,6 +9,7 @@ from .models import (
     ProductVariantSize,
     SubCategory,
     Cart,
+    User,
     Wishlist,
 )
 
@@ -103,6 +104,16 @@ class WishlistAdmin(admin.ModelAdmin):
     autocomplete_fields = ("variant", "user")  # Use autocomplete_fields for better UX
 
 
+class UserAdmin(admin.ModelAdmin):
+    list_display = (
+        "username",
+        "email",
+        "is_active",
+    )
+    search_fields = ("username", "email")
+    ordering = ("username",)
+
+
 # Register models in the Django admin
 admin.site.register(Product, ProductAdmin)
 admin.site.register(ProductVariant, ProductVariantAdmin)
@@ -113,3 +124,4 @@ admin.site.register(SubCategory, SubCategoryAdmin)
 admin.site.register(Rating, RatingAdmin)
 admin.site.register(Cart, CartAdmin)
 admin.site.register(Wishlist, WishlistAdmin)
+admin.site.register(User, UserAdmin)
